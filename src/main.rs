@@ -18,5 +18,18 @@ fn main() {
             },
             ..default()
         }))
+        .add_startup_system(setup)
         .run();
+}
+
+fn setup(mut commands: Commands) {
+    commands.spawn(Camera2dBundle::default());
+
+    commands.spawn(SpriteBundle {
+        sprite: Sprite {
+            custom_size: Some(Vec2::new(20.0, 20.0)),
+            ..default()
+        },
+        ..default()
+    });
 }
