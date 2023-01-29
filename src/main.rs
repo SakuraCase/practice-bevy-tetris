@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use rand::prelude::*;
 
 const UNIT_WIDTH: u32 = 40;
 const UNIT_HEIGHT: u32 = 40;
@@ -11,6 +12,11 @@ const SCREEN_HEIGHT: u32 = UNIT_HEIGHT * Y_LENGTH;
 struct Position {
     x: i32,
     y: i32,
+}
+
+#[derive(Resource)]
+struct Materials {
+    colors: Vec<Color>,
 }
 
 fn main() {
@@ -26,15 +32,36 @@ fn main() {
         }))
         .add_startup_system(setup)
         .add_system(position_transform)
+        .add_system(spawn_block_element)
         .run();
 }
 
 fn setup(mut commands: Commands) {
     commands.spawn(Camera2dBundle::default());
 
+    commands.insert_resource(Materials {
+        colors: vec![
+            Color::rgb_u8(64, 230, 100),
+            Color::rgb_u8(220, 64, 90),
+            Color::rgb_u8(70, 150, 210),
+            Color::rgb_u8(220, 230, 70),
+            Color::rgb_u8(35, 220, 241),
+            Color::rgb_u8(240, 140, 70),
+        ],
+    });
+}
+
+fn spawn_block_element(mut commands: Commands, materials: Res<Materials>) {
+    let mut rng = rand::thread_rng();
+    let mut color_index: usize = rng.gen();
+    color_index %= materials.colors.len();
+
     commands.spawn((
         SpriteBundle {
-            sprite: Sprite { ..default() },
+            sprite: Sprite {
+                color: materials.colors[color_index],
+                ..default()
+            },
             ..default()
         },
         Position { x: 1, y: 5 },
