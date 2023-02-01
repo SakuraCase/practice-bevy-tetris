@@ -19,6 +19,9 @@ struct Materials {
     colors: Vec<Color>,
 }
 
+#[derive(Resource)]
+struct BlockPatterns(Vec<Vec<(i32, i32)>>);
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -30,9 +33,18 @@ fn main() {
             },
             ..default()
         }))
+        .insert_resource(BlockPatterns(vec![
+            vec![(0, 0), (0, -1), (0, 1), (0, 2)],  // I
+            vec![(0, 0), (0, -1), (0, 1), (-1, 1)], // L
+            vec![(0, 0), (0, -1), (0, 1), (1, 1)],  // 逆L
+            vec![(0, 0), (0, -1), (1, 0), (1, 1)],  // Z
+            vec![(0, 0), (1, 0), (0, 1), (1, -1)],  // 逆Z
+            vec![(0, 0), (0, 1), (1, 0), (1, 1)],   // 四角
+            vec![(0, 0), (-1, 0), (1, 0), (0, 1)],  // T
+        ]))
         .add_startup_system(setup)
         .add_system(position_transform)
-        .add_system(spawn_block_element)
+        .add_system(spawn_block)
         .run();
 }
 
@@ -51,21 +63,53 @@ fn setup(mut commands: Commands) {
     });
 }
 
-fn spawn_block_element(mut commands: Commands, materials: Res<Materials>) {
-    let mut rng = rand::thread_rng();
-    let mut color_index: usize = rng.gen();
-    color_index %= materials.colors.len();
-
-    commands.spawn((
+fn block_element(color: Color, position: Position) -> (SpriteBundle, Position) {
+    (
         SpriteBundle {
-            sprite: Sprite {
-                color: materials.colors[color_index],
-                ..default()
-            },
+            sprite: Sprite { color, ..default() },
             ..default()
         },
-        Position { x: 1, y: 5 },
-    ));
+        position,
+    )
+}
+
+fn next_color(colors: &Vec<Color>) -> Color {
+    let mut rng = rand::thread_rng();
+    let mut color_index: usize = rng.gen();
+    color_index %= colors.len();
+
+    colors[color_index]
+}
+
+fn next_block(block_patterns: &Vec<Vec<(i32, i32)>>) -> Vec<(i32, i32)> {
+    let mut rng = rand::thread_rng();
+    let mut block_index: usize = rng.gen();
+    block_index %= block_patterns.len();
+
+    block_patterns[block_index].clone()
+}
+
+fn spawn_block(
+    mut commands: Commands,
+    materials: Res<Materials>,
+    block_patterns: Res<BlockPatterns>,
+) {
+    let new_block = next_block(&block_patterns.0);
+    let new_color = next_color(&materials.colors);
+
+    // ブロックの初期位置
+    let initial_x = X_LENGTH / 2;
+    let initial_y = Y_LENGTH - 4;
+
+    new_block.iter().for_each(|(r_x, r_y)| {
+        commands.spawn(block_element(
+            new_color,
+            Position {
+                x: (initial_x as i32 + r_x),
+                y: (initial_y as i32 + r_y),
+            },
+        ));
+    });
 }
 
 fn position_transform(mut position_query: Query<(&Position, &mut Transform, &mut Sprite)>) {
