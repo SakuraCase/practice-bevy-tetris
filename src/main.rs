@@ -22,6 +22,9 @@ struct Materials {
 #[derive(Resource)]
 struct BlockPatterns(Vec<Vec<(i32, i32)>>);
 
+#[derive(Default)]
+struct NewBlockEvent;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -45,12 +48,12 @@ fn main() {
         .add_startup_system(setup)
         .add_system(position_transform)
         .add_system(spawn_block)
+        .add_event::<NewBlockEvent>()
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup(mut commands: Commands, mut new_block_events: EventWriter<NewBlockEvent>) {
     commands.spawn(Camera2dBundle::default());
-
     commands.insert_resource(Materials {
         colors: vec![
             Color::rgb_u8(64, 230, 100),
@@ -61,6 +64,7 @@ fn setup(mut commands: Commands) {
             Color::rgb_u8(240, 140, 70),
         ],
     });
+    new_block_events.send(NewBlockEvent);
 }
 
 fn block_element(color: Color, position: Position) -> (SpriteBundle, Position) {
@@ -93,7 +97,12 @@ fn spawn_block(
     mut commands: Commands,
     materials: Res<Materials>,
     block_patterns: Res<BlockPatterns>,
+    mut new_block_events_reader: EventReader<NewBlockEvent>,
 ) {
+    if new_block_events_reader.iter().next().is_none() {
+        return;
+    }
+
     let new_block = next_block(&block_patterns.0);
     let new_color = next_color(&materials.colors);
 
