@@ -46,6 +46,9 @@ struct Free;
 #[derive(Resource)]
 struct InputTimer(Timer);
 
+#[derive(Default)]
+struct GameOverEvent;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -76,6 +79,7 @@ fn main() {
         )))
         .insert_resource(GameBoard(vec![vec![false; 25]; 25]))
         .add_startup_system(setup)
+        .add_system(gameover)
         .add_system(delete_line)
         .add_system(position_transform)
         .add_system(spawn_block)
@@ -85,6 +89,7 @@ fn main() {
         .add_system(block_vertical_move)
         .add_system(block_rotate)
         .add_event::<NewBlockEvent>()
+        .add_event::<GameOverEvent>()
         .run();
 }
 
@@ -149,6 +154,8 @@ fn spawn_block(
     materials: Res<Materials>,
     block_patterns: Res<BlockPatterns>,
     mut new_block_events_reader: EventReader<NewBlockEvent>,
+    game_board: ResMut<GameBoard>,
+    mut gameover_events: ResMut<Events<GameOverEvent>>,
 ) {
     if new_block_events_reader.iter().next().is_none() {
         return;
@@ -160,6 +167,19 @@ fn spawn_block(
     // ブロックの初期位置
     let initial_x = X_LENGTH / 2;
     let initial_y = Y_LENGTH;
+
+    // ゲームオーバー判定
+    let gameover = new_block.iter().any(|(r_x, r_y)| {
+        let pos_x = (initial_x as i32 + r_x) as usize;
+        let pos_y = (initial_y as i32 + r_y) as usize;
+
+        game_board.0[pos_y][pos_x]
+    });
+
+    if gameover {
+        gameover_events.send(GameOverEvent);
+        return;
+    }
 
     new_block.iter().for_each(|(r_x, r_y)| {
         commands.spawn(block_element(
@@ -402,7 +422,7 @@ fn delete_line(
     });
 
     // 各Y座標について、ブロック消去適用後の新しいY座標を調べる
-    let mut new_y = vec![0i32; Y_LENGTH as usize];
+    let mut new_y = vec![0i32; Y_LENGTH as usize + 10];
     for y in 0..Y_LENGTH {
         let mut down = 0;
         delete_line_set.iter().for_each(|line| {
@@ -426,4 +446,29 @@ fn delete_line(
                 game_board.0[pos.y as usize][pos.x as usize] = true;
             }
         });
+}
+
+fn gameover(
+    mut commands: Commands,
+    gameover_events: Res<Events<GameOverEvent>>,
+    mut game_board: ResMut<GameBoard>,
+    mut all_block_query: Query<(Entity, &mut Position)>,
+    mut new_block_events: ResMut<Events<NewBlockEvent>>,
+) {
+    let mut gameover_events_reader = gameover_events.get_reader();
+
+    if gameover_events_reader
+        .iter(&gameover_events)
+        .next()
+        .is_none()
+    {
+        return;
+    }
+
+    game_board.0 = vec![vec![false; 25]; 25];
+    all_block_query.iter_mut().for_each(|(entity, _)| {
+        commands.entity(entity).despawn();
+    });
+
+    new_block_events.send(NewBlockEvent);
 }
