@@ -28,6 +28,15 @@ struct NewBlockEvent;
 #[derive(Resource)]
 struct GameTimer(Timer);
 
+#[derive(Resource)]
+struct GameBoard(Vec<Vec<bool>>);
+
+#[derive(Component)]
+struct Fix;
+
+#[derive(Component)]
+struct Free;
+
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -52,6 +61,7 @@ fn main() {
             std::time::Duration::from_millis(400),
             TimerMode::Repeating,
         )))
+        .insert_resource(GameBoard(vec![vec![false; 25]; 25]))
         .add_startup_system(setup)
         .add_system(position_transform)
         .add_system(spawn_block)
@@ -80,13 +90,14 @@ fn game_timer(time: Res<Time>, mut timer: ResMut<GameTimer>) {
     timer.0.tick(time.delta());
 }
 
-fn block_element(color: Color, position: Position) -> (SpriteBundle, Position) {
+fn block_element(color: Color, position: Position) -> (SpriteBundle, Position, Free) {
     (
         SpriteBundle {
             sprite: Sprite { color, ..default() },
             ..default()
         },
         position,
+        Free,
     )
 }
 
@@ -134,14 +145,37 @@ fn spawn_block(
     });
 }
 
-fn block_fall(timer: ResMut<GameTimer>, mut block_query: Query<(Entity, &mut Position)>) {
+fn block_fall(
+    mut commands: Commands,
+    timer: ResMut<GameTimer>,
+    mut block_query: Query<(Entity, &mut Position, &Free)>,
+    mut game_board: ResMut<GameBoard>,
+    mut new_block_events: ResMut<Events<NewBlockEvent>>,
+) {
     if !timer.0.finished() {
         return;
     }
 
-    block_query.iter_mut().for_each(|(_, mut pos)| {
-        pos.y -= 1;
+    let cannot_fall = block_query.iter_mut().any(|(_, pos, _)| {
+        if pos.x as u32 >= X_LENGTH || pos.y as u32 >= Y_LENGTH {
+            return false;
+        }
+        // yが0、または一つ下にブロックがすでに存在する
+        pos.y == 0 || game_board.0[(pos.y - 1) as usize][pos.x as usize]
     });
+
+    if cannot_fall {
+        block_query.iter_mut().for_each(|(entity, pos, _)| {
+            commands.entity(entity).remove::<Free>();
+            commands.entity(entity).insert(Fix);
+            game_board.0[pos.y as usize][pos.x as usize] = true;
+        });
+        new_block_events.send(NewBlockEvent);
+    } else {
+        block_query.iter_mut().for_each(|(_, mut pos, _)| {
+            pos.y -= 1;
+        });
+    }
 }
 
 fn position_transform(mut position_query: Query<(&Position, &mut Transform, &mut Sprite)>) {
